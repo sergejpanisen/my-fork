@@ -1,0 +1,50 @@
+name: Cardano
+
+on:
+  schedule:
+    # Запуск у 40-ту хвилину кожні 4 години (00:40, 04:40 і т.д.)
+    - cron: '30 */5 * * *'
+  workflow_dispatch:
+
+jobs:
+  make-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Fetch ADA Price
+        run: |
+          # 1. Рандомна затримка (до 22 хвилин)
+          sleep $((RANDOM % 1120))
+          
+          TIMESTAMP=$(date "+%Y-%m-%d %H:%M")
+
+          # 2. Отримуємо ціну ADA (ідентифікатор: cardano)
+          RESPONSE=$(curl -s --max-time 15 "https://api.coingecko.com/api/v3/simple/price?ids=cardano&vs_currencies=usd")
+          ADA=$(echo $RESPONSE | jq -r '.cardano.usd // empty')
+
+          # 3. Назва файлу (виберіть з таблиці нижче)
+          FILE_NAME="ouroboros.info"
+
+          # 4. Логіка запису
+          if [ -z "$ADA" ] || [ "$ADA" == "null" ]; then
+            # План Б: системне повідомлення (стиль Cardano)
+            LOG_ENTRY="[$TIMESTAMP] Slot: synchronization confirmed"
+            COMMIT_MSG="ledger: stability check $TIMESTAMP [skip ci]"
+          else
+            # План А: ціна монети
+            LOG_ENTRY="[$TIMESTAMP] ADA Market Price: \$$ADA USD"
+            COMMIT_MSG="market: ada update $TIMESTAMP [skip ci]"
+          fi
+
+          # 5. Оновлення файлу (зберігаємо останні 30 рядків)
+          echo "$LOG_ENTRY" >> $FILE_NAME
+          echo "$(tail -n 36 $FILE_NAME)" > $FILE_NAME
+
+          # 6. Пуш
+          git config --local user.email "sergejpanisen29@gmail.com"
+          git config --local user.name "GitHub Action Bot"
+          git add $FILE_NAME
+          git commit -m "$COMMIT_MSG"
+          git push
